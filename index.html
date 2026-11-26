@@ -1,0 +1,938 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Evidencia Energií | Voda, Plyn, Kúrenie</title>
+    <!-- Načítanie Tailwind CSS pre moderný responzívny dizajn -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Font Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome ikony -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc;
+        }
+        /* Vlastné jemné prechody pre karty a taby */
+        .tab-btn {
+            transition: all 0.2s ease-in-out;
+        }
+        /* Skrytie posuvníka pri horizontálnom menu na mobile */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="text-slate-800 antialiased min-h-screen flex flex-col">
+
+    <!-- Notifikačný toast (náhrada za alert/confirm) -->
+    <div id="toast-container" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+    <!-- Potvrdzovací modál (náhrada za window.confirm) -->
+    <div id="confirm-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-xl border border-slate-100 transform transition-all">
+            <div class="flex items-center gap-3 text-rose-600 mb-3">
+                <div class="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center shrink-0">
+                    <i class="fa-solid fa-triangle-exclamation text-lg"></i>
+                </div>
+                <h3 class="text-lg font-bold text-slate-900" id="modal-title">Potvrdiť akciu</h3>
+            </div>
+            <p class="text-sm text-slate-600 mb-6" id="modal-text">Naozaj chcete odstrániť tento záznam? Táto akcia sa nedá vrátiť späť.</p>
+            <div class="flex justify-end gap-3">
+                <button id="modal-cancel" class="px-4 py-2 rounded-xl text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 transition">Zrušiť</button>
+                <button id="modal-confirm" class="px-4 py-2 rounded-xl text-sm font-medium text-white bg-rose-600 hover:bg-rose-700 transition shadow-sm">Odstrániť</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Horná navigačná lišta -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+        <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <!-- Logo a názov aplikácie -->
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 via-amber-500 to-rose-600 flex items-center justify-center text-white shadow-md">
+                        <i class="fa-solid fa-house-chimney-crack text-lg"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-lg sm:text-xl font-bold tracking-tight text-slate-900 leading-tight">Domáce Energie</h1>
+                        <p class="text-xs text-slate-500 hidden sm:block">Evidencia odpočtov, servisu a revízií</p>
+                    </div>
+                </div>
+
+                <!-- Akčné tlačidlá (Export / Záloha / Demo dáta) -->
+                <div class="flex items-center gap-2">
+                    <button onclick="exportData()" title="Stiahnuť zálohu dát (JSON)" class="inline-flex items-center gap-2 px-3 py-2 rounded-xl text-xs sm:text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 transition">
+                        <i class="fa-solid fa-download text-slate-500"></i>
+                        <span class="hidden md:inline">Zálohovať</span>
+                    </button>
+                    <label title="Obnoviť dáta zo súboru" class="cursor-pointer inline-flex items-center gap-2 px-3 py-2 rounded-xl text-xs sm:text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 transition">
+                        <i class="fa-solid fa-upload text-slate-500"></i>
+                        <span class="hidden md:inline">Obnoviť</span>
+                        <input type="file" id="import-file" accept=".json" class="hidden" onchange="importData(event)">
+                    </label>
+                </div>
+            </div>
+
+            <!-- Hlavná navigácia (Záložky / Karty) -->
+            <nav class="flex gap-2 overflow-x-auto no-scrollbar py-2 -mx-4 px-4 sm:mx-0 sm:px-0" aria-label="Kategórie">
+                <button onclick="switchTab('dashboard')" id="tab-dashboard" class="tab-btn flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap bg-slate-900 text-white shadow-sm">
+                    <i class="fa-solid fa-chart-pie"></i>
+                    <span>Prehľad (Dashboard)</span>
+                </button>
+                <button onclick="switchTab('voda')" id="tab-voda" class="tab-btn flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap text-slate-600 hover:bg-blue-50 hover:text-blue-700">
+                    <i class="fa-solid fa-droplet text-blue-500"></i>
+                    <span>Voda</span>
+                </button>
+                <button onclick="switchTab('plyn')" id="tab-plyn" class="tab-btn flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap text-slate-600 hover:bg-amber-50 hover:text-amber-700">
+                    <i class="fa-solid fa-fire-flame-simple text-amber-500"></i>
+                    <span>Plyn</span>
+                </button>
+                <button onclick="switchTab('kurenie')" id="tab-kurenie" class="tab-btn flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap text-slate-600 hover:bg-rose-50 hover:text-rose-700">
+                    <i class="fa-solid fa-temperature-three-quarters text-rose-500"></i>
+                    <span>Kúrenie</span>
+                </button>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Hlavný obsah aplikácie -->
+    <main class="flex-grow max-w-6xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+
+        <!-- ========================================================= -->
+        <!-- SEKCIA 1: DASHBOARD (SÚHRNNÝ PREHĽAD)                     -->
+        <!-- ========================================================= -->
+        <section id="view-dashboard" class="space-y-6">
+            <!-- Horný banner s rýchlym pridaním -->
+            <div class="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                    <h2 class="text-xl font-bold text-slate-900">Súhrnný prehľad domácnosti</h2>
+                    <p class="text-sm text-slate-500 mt-0.5">Posledné odpočty, vypočítaná spotreba a servisné úkony na jednom mieste.</p>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <button onclick="loadDemoData()" class="px-3.5 py-2 rounded-xl text-xs font-semibold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition border border-indigo-200">
+                        <i class="fa-solid fa-wand-magic-sparkles mr-1"></i> Načítať ukážkové dáta
+                    </button>
+                </div>
+            </div>
+
+            <!-- 3 Súhrnné karty pre kategórie -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+                
+                <!-- Karta VODA -->
+                <div class="bg-white rounded-2xl p-6 border border-blue-100 shadow-sm hover:shadow-md transition relative overflow-hidden group">
+                    <div class="absolute top-0 right-0 w-24 h-24 bg-blue-50 rounded-bl-full -mr-4 -mt-4 transition-transform group-hover:scale-110"></div>
+                    <div class="relative">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="w-12 h-12 rounded-2xl bg-blue-100 text-blue-600 flex items-center justify-center text-xl">
+                                <i class="fa-solid fa-droplet"></i>
+                            </div>
+                            <button onclick="switchTab('voda')" class="text-xs font-semibold text-blue-600 hover:text-blue-800 bg-blue-50 px-3 py-1.5 rounded-lg transition">
+                                Otvoriť kartu <i class="fa-solid fa-arrow-right ml-1"></i>
+                            </button>
+                        </div>
+                        <h3 class="text-lg font-bold text-slate-900">Voda</h3>
+                        <p class="text-xs text-slate-500 mb-4">Vodomery, vodoinštalácia, odpočty</p>
+                        
+                        <div class="space-y-2 border-t border-slate-100 pt-4">
+                            <div class="flex justify-between text-sm">
+                                <span class="text-slate-500">Posledný stav:</span>
+                                <span class="font-bold text-slate-900" id="dash-voda-last">—</span>
+                            </div>
+                            <div class="flex justify-between text-sm">
+                                <span class="text-slate-500">Posledná spotreba:</span>
+                                <span class="font-semibold text-blue-600" id="dash-voda-diff">—</span>
+                            </div>
+                            <div class="flex justify-between text-xs text-slate-400 pt-1">
+                                <span>Dátum záznamu:</span>
+                                <span id="dash-voda-date">—</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Karta PLYN -->
+                <div class="bg-white rounded-2xl p-6 border border-amber-100 shadow-sm hover:shadow-md transition relative overflow-hidden group">
+                    <div class="absolute top-0 right-0 w-24 h-24 bg-amber-50 rounded-bl-full -mr-4 -mt-4 transition-transform group-hover:scale-110"></div>
+                    <div class="relative">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="w-12 h-12 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center text-xl">
+                                <i class="fa-solid fa-fire-flame-simple"></i>
+                            </div>
+                            <button onclick="switchTab('plyn')" class="text-xs font-semibold text-amber-700 hover:text-amber-900 bg-amber-50 px-3 py-1.5 rounded-lg transition">
+                                Otvoriť kartu <i class="fa-solid fa-arrow-right ml-1"></i>
+                            </button>
+                        </div>
+                        <h3 class="text-lg font-bold text-slate-900">Plyn</h3>
+                        <p class="text-xs text-slate-500 mb-4">Plynomer, revízie prípojky a spotrebičov</p>
+                        
+                        <div class="space-y-2 border-t border-slate-100 pt-4">
+                            <div class="flex justify-between text-sm">
+                                <span class="text-slate-500">Posledný stav:</span>
+                                <span class="font-bold text-slate-900" id="dash-plyn-last">—</span>
+                            </div>
+                            <div class="flex justify-between text-sm">
+                                <span class="text-slate-500">Posledná spotreba:</span>
+                                <span class="font-semibold text-amber-600" id="dash-plyn-diff">—</span>
+                            </div>
+                            <div class="flex justify-between text-xs text-slate-400 pt-1">
+                                <span>Dátum záznamu:</span>
+                                <span id="dash-plyn-date">—</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Karta KÚRENIE -->
+                <div class="bg-white rounded-2xl p-6 border border-rose-100 shadow-sm hover:shadow-md transition relative overflow-hidden group">
+                    <div class="absolute top-0 right-0 w-24 h-24 bg-rose-50 rounded-bl-full -mr-4 -mt-4 transition-transform group-hover:scale-110"></div>
+                    <div class="relative">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center text-xl">
+                                <i class="fa-solid fa-temperature-three-quarters"></i>
+                            </div>
+                            <button onclick="switchTab('kurenie')" class="text-xs font-semibold text-rose-600 hover:text-rose-800 bg-rose-50 px-3 py-1.5 rounded-lg transition">
+                                Otvoriť kartu <i class="fa-solid fa-arrow-right ml-1"></i>
+                            </button>
+                        </div>
+                        <h3 class="text-lg font-bold text-slate-900">Kúrenie</h3>
+                        <p class="text-xs text-slate-500 mb-4">Kotol, merače tepla, servis a údržba</p>
+                        
+                        <div class="space-y-2 border-t border-slate-100 pt-4">
+                            <div class="flex justify-between text-sm">
+                                <span class="text-slate-500">Posledný stav:</span>
+                                <span class="font-bold text-slate-900" id="dash-kurenie-last">—</span>
+                            </div>
+                            <div class="flex justify-between text-sm">
+                                <span class="text-slate-500">Posledná spotreba:</span>
+                                <span class="font-semibold text-rose-600" id="dash-kurenie-diff">—</span>
+                            </div>
+                            <div class="flex justify-between text-xs text-slate-400 pt-1">
+                                <span>Dátum záznamu:</span>
+                                <span id="dash-kurenie-date">—</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Posledná aktivita naprieč všetkými kategóriami -->
+            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="p-5 sm:p-6 border-b border-slate-100 flex justify-between items-center">
+                    <div>
+                        <h3 class="text-base font-bold text-slate-900">Posledné záznamy a úkony</h3>
+                        <p class="text-xs text-slate-500">Chronologický prehľad posledných 8 záznamov zo všetkých kategórií</p>
+                    </div>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-slate-50/80 text-slate-500 text-xs uppercase tracking-wider border-b border-slate-200">
+                                <th class="py-3.5 px-4 font-semibold">Kategória</th>
+                                <th class="py-3.5 px-4 font-semibold">Dátum</th>
+                                <th class="py-3.5 px-4 font-semibold">Typ úkonu</th>
+                                <th class="py-3.5 px-4 font-semibold">Stav merača</th>
+                                <th class="py-3.5 px-4 font-semibold">Poznámka</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dashboard-recent-table" class="divide-y divide-slate-100 text-sm">
+                            <!-- Naplní sa dynamicky cez JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ========================================================= -->
+        <!-- SEKCIA 2: DETAIL KATEGÓRIE (VODA / PLYN / KÚRENIE)        -->
+        <!-- ========================================================= -->
+        <section id="view-category" class="hidden space-y-6">
+            
+            <!-- Hlavička kategórie s dynamickou farbou -->
+            <div id="cat-banner" class="rounded-2xl p-6 text-white shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-blue-600">
+                <div class="flex items-center gap-4">
+                    <div class="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center text-2xl shrink-0">
+                        <i id="cat-icon" class="fa-solid fa-droplet"></i>
+                    </div>
+                    <div>
+                        <h2 id="cat-title" class="text-2xl font-bold">Voda</h2>
+                        <p id="cat-subtitle" class="text-sm text-white/85">Evidencia odpočtov vodomerov, servisných zásahov a revízií</p>
+                    </div>
+                </div>
+                <div class="bg-white/15 backdrop-blur-sm rounded-xl px-4 py-3 text-right">
+                    <div class="text-xs uppercase tracking-wider text-white/80">Celkový počet záznamov</div>
+                    <div id="cat-total-count" class="text-2xl font-bold">0</div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                
+                <!-- ĽAVÝ STĹPEC: Formulár na pridanie záznamu (4 stĺpce na desktope) -->
+                <div class="lg:col-span-4">
+                    <div class="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200 shadow-sm sticky top-24">
+                        <h3 class="text-base font-bold text-slate-900 mb-4 flex items-center gap-2">
+                            <i class="fa-solid fa-circle-plus text-slate-400"></i>
+                            Nový záznam
+                        </h3>
+                        
+                        <form id="record-form" onsubmit="handleAddRecord(event)" class="space-y-4">
+                            <!-- Dátum -->
+                            <div>
+                                <label for="rec-date" class="block text-xs font-semibold text-slate-700 mb-1">Dátum *</label>
+                                <input type="date" id="rec-date" required class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-slate-50/50">
+                            </div>
+
+                            <!-- Typ úkonu -->
+                            <div>
+                                <label for="rec-type" class="block text-xs font-semibold text-slate-700 mb-1">Typ záznamu / úkonu *</label>
+                                <select id="rec-type" onchange="toggleValueRequired()" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50">
+                                    <option value="Odpočet merača">Pravidelný odpočet merača</option>
+                                    <option value="Ročné vyúčtovanie">Ročné vyúčtovanie / Faktúra</option>
+                                    <option value="Servis / Údržba">Servis / Údržba zariadenia</option>
+                                    <option value="Revízia / Kontrola">Odborná revízia / Kontrola</option>
+                                    <option value="Výmena merača">Výmena merača / Počiatočný stav</option>
+                                </select>
+                            </div>
+
+                            <!-- Stav merača a Jednotka -->
+                            <div class="grid grid-cols-3 gap-2">
+                                <div class="col-span-2">
+                                    <label for="rec-value" class="block text-xs font-semibold text-slate-700 mb-1">
+                                        Stav merača <span id="val-optional-hint" class="text-slate-400 font-normal hidden">(voliteľné)</span>
+                                    </label>
+                                    <input type="number" step="0.001" id="rec-value" placeholder="napr. 145.50" required class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50">
+                                </div>
+                                <div>
+                                    <label for="rec-unit" class="block text-xs font-semibold text-slate-700 mb-1">Jednotka</label>
+                                    <select id="rec-unit" class="w-full px-2.5 py-2.5 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50">
+                                        <option value="m³">m³</option>
+                                        <option value="kWh">kWh</option>
+                                        <option value="MWh">MWh</option>
+                                        <option value="GJ">GJ</option>
+                                        <option value="€">€</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <!-- Poznámka -->
+                            <div>
+                                <label for="rec-note" class="block text-xs font-semibold text-slate-700 mb-1">Poznámka / Popis úkonu</label>
+                                <textarea id="rec-note" rows="3" placeholder="Napr. Čistenie kotla, revízny technik p. Novák, stav studenej vody..." class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"></textarea>
+                            </div>
+
+                            <!-- Tlačidlo odoslať -->
+                            <button type="submit" id="rec-submit-btn" class="w-full py-3 px-4 rounded-xl text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 transition shadow-sm flex items-center justify-center gap-2">
+                                <i class="fa-solid fa-plus"></i>
+                                <span>Uložiť záznam</span>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- PRAVÝ STĹPEC: Tabuľka histórie a výpočtu spotreby (8 stĺpcov na desktope) -->
+                <div class="lg:col-span-8 space-y-4">
+                    
+                    <!-- Filter a rýchle štatistiky kategórie -->
+                    <div class="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Filter:</span>
+                            <select id="filter-type" onchange="renderCategoryTable()" class="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-700 bg-slate-50 focus:outline-none">
+                                <option value="ALL">Všetky záznamy</option>
+                                <option value="Odpočet merača">Len odpočty merača</option>
+                                <option value="Servis">Servis a revízie</option>
+                            </select>
+                        </div>
+                        <div class="text-xs text-slate-500">
+                            <i class="fa-solid fa-circle-info text-slate-400 mr-1"></i>
+                            Spotreba sa počíta automaticky medzi dvoma odpočtami rovnakej jednotky.
+                        </div>
+                    </div>
+
+                    <!-- Tabuľka záznamov -->
+                    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider border-b border-slate-200">
+                                        <th class="py-3.5 px-4 font-semibold">Dátum</th>
+                                        <th class="py-3.5 px-4 font-semibold">Úkon</th>
+                                        <th class="py-3.5 px-4 font-semibold">Stav merača</th>
+                                        <th class="py-3.5 px-4 font-semibold">Spotreba (Rozdiel)</th>
+                                        <th class="py-3.5 px-4 font-semibold">Poznámka</th>
+                                        <th class="py-3.5 px-4 font-semibold text-right">Akcia</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="category-table-body" class="divide-y divide-slate-100 text-sm">
+                                    <!-- Dynamicky generované riadky -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Pätička -->
+    <footer class="bg-white border-t border-slate-200 py-5 mt-auto">
+        <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row justify-between items-center gap-2 text-xs text-slate-500">
+            <div>Evidencia Energií & Služieb (Voda • Plyn • Kúrenie)</div>
+            <div>Dáta sú bezpečne uložené lokálne vo vašom prehliadači (<code class="bg-slate-100 px-1.5 py-0.5 rounded text-slate-700">localStorage</code>)</div>
+        </div>
+    </footer>
+
+    <!-- JAVASCRIPT LOGIKA APLIKÁCIE -->
+    <script>
+        // ==========================================
+        // 1. KONFIGURÁCIA A STAV APLIKÁCIE
+        // ==========================================
+        const STORAGE_KEY = 'domace_energie_data_v1';
+        let currentTab = 'dashboard';
+        let records = [];
+
+        // Konfigurácia vizuálu a predvolených jednotiek pre jednotlivé kategórie
+        const CATEGORY_CONFIG = {
+            voda: {
+                title: 'Voda',
+                subtitle: 'Evidencia odpočtov vodomerov (studená/teplá voda), údržby a porúch',
+                icon: 'fa-droplet',
+                defaultUnit: 'm³',
+                bannerBg: 'bg-gradient-to-r from-blue-600 to-cyan-600',
+                btnBg: 'bg-blue-600 hover:bg-blue-700',
+                badgeBg: 'bg-blue-100 text-blue-700',
+                diffText: 'text-blue-600'
+            },
+            plyn: {
+                title: 'Plyn',
+                subtitle: 'Evidencia spotreby plynu, revízií plynových zariadení a prípojok',
+                icon: 'fa-fire-flame-simple',
+                defaultUnit: 'm³',
+                bannerBg: 'bg-gradient-to-r from-amber-500 to-orange-600',
+                btnBg: 'bg-amber-600 hover:bg-amber-700',
+                badgeBg: 'bg-amber-100 text-amber-800',
+                diffText: 'text-amber-600'
+            },
+            kurenie: {
+                title: 'Kúrenie',
+                subtitle: 'Evidencia kotla, meračov tepla, servisných prehliadok a čistenia komína',
+                icon: 'fa-temperature-three-quarters',
+                defaultUnit: 'kWh',
+                bannerBg: 'bg-gradient-to-r from-rose-600 to-red-600',
+                btnBg: 'bg-rose-600 hover:bg-rose-700',
+                badgeBg: 'bg-rose-100 text-rose-700',
+                diffText: 'text-rose-600'
+            }
+        };
+
+        // ==========================================
+        // 2. INICIALIZÁCIA A PRÁCA S LOCALSTORAGE
+        // ==========================================
+        window.addEventListener('DOMContentLoaded', () => {
+            loadFromStorage();
+            // Nastavenie dnešného dátumu do formulára ako predvoleného
+            document.getElementById('rec-date').valueAsDate = new Date();
+            renderAll();
+        });
+
+        function loadFromStorage() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY);
+                if (raw) {
+                    records = JSON.parse(raw);
+                } else {
+                    records = [];
+                }
+            } catch (e) {
+                console.error('Chyba pri čítaní z localStorage:', e);
+                records = [];
+            }
+        }
+
+        function saveToStorage() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+            } catch (e) {
+                showToast('Chyba pri ukladaní dát do prehliadača.', 'error');
+            }
+        }
+
+        // ==========================================
+        // 3. PREPÍNANIE ZÁLOŽIEK (TABS)
+        // ==========================================
+        function switchTab(tabId) {
+            currentTab = tabId;
+
+            // Reset štýlov všetkých navigačných tlačidiel
+            const allTabs = ['dashboard', 'voda', 'plyn', 'kurenie'];
+            allTabs.forEach(t => {
+                const btn = document.getElementById(`tab-${t}`);
+                btn.className = 'tab-btn flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap text-slate-600 hover:bg-slate-100';
+            });
+
+            // Zvýraznenie aktívneho tabu
+            const activeBtn = document.getElementById(`tab-${tabId}`);
+            if (tabId === 'dashboard') {
+                activeBtn.className = 'tab-btn flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap bg-slate-900 text-white shadow-sm';
+                document.getElementById('view-dashboard').classList.remove('hidden');
+                document.getElementById('view-category').classList.add('hidden');
+                renderDashboard();
+            } else {
+                const cfg = CATEGORY_CONFIG[tabId];
+                const activeColors = {
+                    voda: 'bg-blue-600 text-white shadow-sm',
+                    plyn: 'bg-amber-600 text-white shadow-sm',
+                    kurenie: 'bg-rose-600 text-white shadow-sm'
+                };
+                activeBtn.className = `tab-btn flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap ${activeColors[tabId]}`;
+                
+                // Ikona v aktívnom tabe nech je biela
+                const iconEl = activeBtn.querySelector('i');
+                if (iconEl) iconEl.className = `fa-solid ${cfg.icon} text-white`;
+
+                // Obnovenie pôvodných farieb ikon pre neaktívne taby
+                ['voda', 'plyn', 'kurenie'].forEach(cat => {
+                    if (cat !== tabId) {
+                        const otherBtn = document.getElementById(`tab-${cat}`);
+                        const otherIcon = otherBtn.querySelector('i');
+                        const colorMap = { voda: 'text-blue-500', plyn: 'text-amber-500', kurenie: 'text-rose-500' };
+                        if (otherIcon) otherIcon.className = `fa-solid ${CATEGORY_CONFIG[cat].icon} ${colorMap[cat]}`;
+                    }
+                });
+
+                document.getElementById('view-dashboard').classList.add('hidden');
+                document.getElementById('view-category').classList.remove('hidden');
+                setupCategoryView(tabId);
+            }
+        }
+
+        // Nastavenie vzhľadu formulára a hlavičky podľa vybranej kategórie
+        function setupCategoryView(category) {
+            const cfg = CATEGORY_CONFIG[category];
+            
+            const banner = document.getElementById('cat-banner');
+            banner.className = `rounded-2xl p-6 text-white shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${cfg.bannerBg}`;
+            
+            document.getElementById('cat-icon').className = `fa-solid ${cfg.icon}`;
+            document.getElementById('cat-title').textContent = cfg.title;
+            document.getElementById('cat-subtitle').textContent = cfg.subtitle;
+            
+            const submitBtn = document.getElementById('rec-submit-btn');
+            submitBtn.className = `w-full py-3 px-4 rounded-xl text-sm font-semibold text-white transition shadow-sm flex items-center justify-center gap-2 ${cfg.btnBg}`;
+
+            // Nastavenie predvolenej jednotky
+            document.getElementById('rec-unit').value = cfg.defaultUnit;
+            document.getElementById('filter-type').value = 'ALL';
+
+            renderCategoryTable();
+        }
+
+        // Ak používateľ vyberie "Servis" alebo "Revízia", stav merača nie je povinný
+        function toggleValueRequired() {
+            const type = document.getElementById('rec-type').value;
+            const valInput = document.getElementById('rec-value');
+            const hint = document.getElementById('val-optional-hint');
+
+            if (type === 'Servis / Údržba' || type === 'Revízia / Kontrola') {
+                valInput.removeAttribute('required');
+                hint.classList.remove('hidden');
+            } else {
+                valInput.setAttribute('required', 'true');
+                hint.classList.add('hidden');
+            }
+        }
+
+        // ==========================================
+        // 4. PRIDÁVANIE A MAZANIE ZÁZNAMOV
+        // ==========================================
+        function handleAddRecord(event) {
+            event.preventDefault();
+            if (currentTab === 'dashboard') return;
+
+            const date = document.getElementById('rec-date').value;
+            const type = document.getElementById('rec-type').value;
+            const rawValue = document.getElementById('rec-value').value;
+            const unit = document.getElementById('rec-unit').value;
+            const note = document.getElementById('rec-note').value.trim();
+
+            const numericValue = rawValue !== '' ? parseFloat(rawValue) : null;
+
+            const newRecord = {
+                id: Date.now().toString() + Math.random().toString(36).substring(2, 6),
+                category: currentTab,
+                date: date,
+                type: type,
+                value: numericValue,
+                unit: numericValue !== null ? unit : '',
+                note: note,
+                createdAt: Date.now()
+            };
+
+            records.push(newRecord);
+            saveToStorage();
+
+            // Reset polí formulára (dátum necháme)
+            document.getElementById('rec-value').value = '';
+            document.getElementById('rec-note').value = '';
+
+            renderCategoryTable();
+            showToast('Záznam bol úspešne uložený.', 'success');
+        }
+
+        function requestDeleteRecord(id) {
+            const modal = document.getElementById('confirm-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+
+            const confirmBtn = document.getElementById('modal-confirm');
+            const cancelBtn = document.getElementById('modal-cancel');
+
+            // Vyčistenie predchádzajúcich listenerov
+            const newConfirm = confirmBtn.cloneNode(true);
+            const newCancel = cancelBtn.cloneNode(true);
+            confirmBtn.parentNode.replaceChild(newConfirm, confirmBtn);
+            cancelBtn.parentNode.replaceChild(newCancel, cancelBtn);
+
+            newCancel.addEventListener('click', () => {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+            });
+
+            newConfirm.addEventListener('click', () => {
+                records = records.filter(r => r.id !== id);
+                saveToStorage();
+                renderAll();
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+                showToast('Záznam bol odstránený.', 'info');
+            });
+        }
+
+        // ==========================================
+        // 5. VÝPOČET SPOTREBY A RENDEROVANIE TABULIEK
+        // ==========================================
+        function getEnrichedCategoryRecords(category) {
+            // 1. Vyfiltrujeme záznamy pre kategóriu a zoradíme vzostupne podľa dátumu (od najstaršieho)
+            const catRecords = records
+                .filter(r => r.category === category)
+                .sort((a, b) => {
+                    if (a.date !== b.date) return a.date.localeCompare(b.date);
+                    return a.createdAt - b.createdAt;
+                });
+
+            // 2. Vypočítame spotrebu oproti predchádzajúcemu odpočtu s rovnakou jednotkou
+            const lastReadingByUnit = {};
+
+            const enriched = catRecords.map(rec => {
+                let diff = null;
+                let isReset = rec.type === 'Výmena merača';
+
+                if (rec.value !== null && !isNaN(rec.value)) {
+                    const u = rec.unit || 'm³';
+                    if (!isReset && lastReadingByUnit[u] !== undefined) {
+                        diff = rec.value - lastReadingByUnit[u];
+                        // Zaokrúhlenie na 3 desatinné miesta kvôli float nepresnostiam
+                        diff = Math.round(diff * 1000) / 1000;
+                    }
+                    // Aktualizujeme posledný stav pre danú jednotku
+                    lastReadingByUnit[u] = rec.value;
+                }
+
+                return { ...rec, diff };
+            });
+
+            // 3. Vrátime v opačnom poradí (najnovšie navrchu pre zobrazenie v tabuľke)
+            return enriched.reverse();
+        }
+
+        function renderCategoryTable() {
+            if (currentTab === 'dashboard') return;
+            const cfg = CATEGORY_CONFIG[currentTab];
+            const filterVal = document.getElementById('filter-type').value;
+
+            let enriched = getEnrichedCategoryRecords(currentTab);
+            document.getElementById('cat-total-count').textContent = enriched.length;
+
+            // Aplikovanie filtra
+            if (filterVal === 'Odpočet merača') {
+                enriched = enriched.filter(r => r.value !== null);
+            } else if (filterVal === 'Servis') {
+                enriched = enriched.filter(r => r.type.includes('Servis') || r.type.includes('Revízia'));
+            }
+
+            const tbody = document.getElementById('category-table-body');
+            tbody.innerHTML = '';
+
+            if (enriched.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="py-12 px-4 text-center text-slate-400">
+                            <div class="w-12 h-12 rounded-full bg-slate-100 mx-auto flex items-center justify-center mb-3 text-slate-400">
+                                <i class="fa-solid fa-folder-open text-lg"></i>
+                            </div>
+                            <p class="text-sm font-medium text-slate-600">Zatiaľ žiadne záznamy v tejto kategórii</p>
+                            <p class="text-xs mt-1">Pridajte prvý odpočet alebo servisný úkon cez formulár vľavo.</p>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            enriched.forEach(rec => {
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-slate-50/80 transition group';
+
+                // Formátovanie stavu merača
+                const valueDisplay = rec.value !== null 
+                    ? `<span class="font-bold text-slate-900">${formatNumber(rec.value)}</span> <span class="text-xs text-slate-500">${rec.unit}</span>`
+                    : `<span class="text-slate-400 text-xs italic">Bez odpočtu</span>`;
+
+                // Formátovanie rozdielu (spotreby)
+                let diffDisplay = '<span class="text-slate-300">—</span>';
+                if (rec.diff !== null) {
+                    if (rec.diff >= 0) {
+                        diffDisplay = `<span class="inline-flex items-center gap-1 font-semibold ${cfg.diffText} bg-slate-100/80 px-2.5 py-1 rounded-lg text-xs">
+                            +${formatNumber(rec.diff)} ${rec.unit}
+                        </span>`;
+                    } else {
+                        diffDisplay = `<span class="inline-flex items-center gap-1 font-semibold text-rose-600 bg-rose-50 px-2.5 py-1 rounded-lg text-xs" title="Aktuálny stav je nižší než predchádzajúci">
+                            ${formatNumber(rec.diff)} ${rec.unit}
+                        </span>`;
+                    }
+                } else if (rec.type === 'Výmena merača') {
+                    diffDisplay = `<span class="text-xs text-slate-400 italic">Nový merač</span>`;
+                }
+
+                // Odznak typu úkonu
+                const isService = rec.type.includes('Servis') || rec.type.includes('Revízia');
+                const typeBadge = isService
+                    ? `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-purple-100 text-purple-700"><i class="fa-solid fa-wrench text-[10px]"></i> ${rec.type}</span>`
+                    : `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium ${cfg.badgeBg}">${rec.type}</span>`;
+
+                tr.innerHTML = `
+                    <td class="py-3.5 px-4 whitespace-nowrap font-medium text-slate-700">${formatDateSK(rec.date)}</td>
+                    <td class="py-3.5 px-4 whitespace-nowrap">${typeBadge}</td>
+                    <td class="py-3.5 px-4 whitespace-nowrap">${valueDisplay}</td>
+                    <td class="py-3.5 px-4 whitespace-nowrap">${diffDisplay}</td>
+                    <td class="py-3.5 px-4 text-slate-600 max-w-xs truncate" title="${escapeHTML(rec.note)}">${rec.note ? escapeHTML(rec.note) : '<span class="text-slate-300">—</span>'}</td>
+                    <td class="py-3.5 px-4 whitespace-nowrap text-right">
+                        <button onclick="requestDeleteRecord('${rec.id}')" title="Odstrániť záznam" class="p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition">
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function renderDashboard() {
+            // Aktualizácia 3 súhrnných kariet
+            ['voda', 'plyn', 'kurenie'].forEach(cat => {
+                const enriched = getEnrichedCategoryRecords(cat);
+                // Hľadáme posledný záznam, ktorý má číselnú hodnotu odpočtu
+                const lastWithReading = enriched.find(r => r.value !== null);
+
+                const lastEl = document.getElementById(`dash-${cat}-last`);
+                const diffEl = document.getElementById(`dash-${cat}-diff`);
+                const dateEl = document.getElementById(`dash-${cat}-date`);
+
+                if (lastWithReading) {
+                    lastEl.textContent = `${formatNumber(lastWithReading.value)} ${lastWithReading.unit}`;
+                    dateEl.textContent = formatDateSK(lastWithReading.date);
+                    
+                    if (lastWithReading.diff !== null) {
+                        const sign = lastWithReading.diff >= 0 ? '+' : '';
+                        diffEl.textContent = `${sign}${formatNumber(lastWithReading.diff)} ${lastWithReading.unit}`;
+                    } else {
+                        diffEl.textContent = 'Prvý odpočet';
+                    }
+                } else {
+                    lastEl.textContent = 'Bez odpočtu';
+                    diffEl.textContent = '—';
+                    dateEl.textContent = enriched.length > 0 ? formatDateSK(enriched[0].date) : 'Žiadne dáta';
+                }
+            });
+
+            // Aktualizácia tabuľky posledných 8 záznamov naprieč všetkými kategóriami
+            const recentTable = document.getElementById('dashboard-recent-table');
+            recentTable.innerHTML = '';
+
+            const sortedAll = [...records].sort((a, b) => {
+                if (a.date !== b.date) return b.date.localeCompare(a.date);
+                return b.createdAt - a.createdAt;
+            }).slice(0, 8);
+
+            if (sortedAll.length === 0) {
+                recentTable.innerHTML = `
+                    <tr>
+                        <td colspan="5" class="py-10 px-4 text-center text-slate-400 text-sm">
+                            Zatiaľ nemáte uložené žiadne záznamy. Vyberte si kategóriu <strong>Voda</strong>, <strong>Plyn</strong> alebo <strong>Kúrenie</strong> hore a pridajte prvý záznam.
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            sortedAll.forEach(rec => {
+                const cfg = CATEGORY_CONFIG[rec.category];
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-slate-50/80 transition cursor-pointer';
+                tr.onclick = () => switchTab(rec.category);
+
+                const valStr = rec.value !== null ? `<strong>${formatNumber(rec.value)}</strong> ${rec.unit}` : '<span class="text-slate-400 italic text-xs">Úkon bez odpočtu</span>';
+
+                tr.innerHTML = `
+                    <td class="py-3.5 px-4 whitespace-nowrap">
+                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold ${cfg.badgeBg}">
+                            <i class="fa-solid ${cfg.icon}"></i> ${cfg.title}
+                        </span>
+                    </td>
+                    <td class="py-3.5 px-4 whitespace-nowrap text-slate-700 font-medium">${formatDateSK(rec.date)}</td>
+                    <td class="py-3.5 px-4 whitespace-nowrap text-slate-600">${rec.type}</td>
+                    <td class="py-3.5 px-4 whitespace-nowrap text-slate-900">${valStr}</td>
+                    <td class="py-3.5 px-4 text-slate-500 max-w-xs truncate">${rec.note ? escapeHTML(rec.note) : '—'}</td>
+                `;
+                recentTable.appendChild(tr);
+            });
+        }
+
+        function renderAll() {
+            if (currentTab === 'dashboard') {
+                renderDashboard();
+            } else {
+                renderCategoryTable();
+            }
+        }
+
+        // ==========================================
+        // 6. EXPORT, IMPORT A UKÁŽKOVÉ DÁTA
+        // ==========================================
+        function exportData() {
+            if (records.length === 0) {
+                showToast('Nie sú k dispozícii žiadne dáta na export.', 'info');
+                return;
+            }
+            const dataStr = JSON.stringify(records, null, 2);
+            const blob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            
+            const a = document.createElement('a');
+            const today = new Date().toISOString().slice(0, 10);
+            a.href = url;
+            a.download = `evidencia-energii-zaloha-${today}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            showToast('Záloha dát bola stiahnutá.', 'success');
+        }
+
+        function importData(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const imported = JSON.parse(e.target.result);
+                    if (Array.isArray(imported)) {
+                        records = imported;
+                        saveToStorage();
+                        renderAll();
+                        showToast(`Úspešne obnovených ${records.length} záznamov.`, 'success');
+                    } else {
+                        showToast('Neplatný formát záložného súboru.', 'error');
+                    }
+                } catch (err) {
+                    showToast('Chyba pri čítaní súboru.', 'error');
+                }
+                event.target.value = '';
+            };
+            reader.readAsText(file);
+        }
+
+        function loadDemoData() {
+            const demo = [
+                { id: 'd1', category: 'voda', date: '2026-09-01', type: 'Odpočet merača', value: 142.5, unit: 'm³', note: 'Odpočet studenej vody - šachta', createdAt: 1001 },
+                { id: 'd2', category: 'voda', date: '2026-10-01', type: 'Odpočet merača', value: 151.2, unit: 'm³', note: 'Mesačný odpočet', createdAt: 1002 },
+                { id: 'd3', category: 'voda', date: '2026-11-01', type: 'Odpočet merača', value: 159.8, unit: 'm³', note: 'Kontrola tesnosti ventilu v poriadku', createdAt: 1003 },
+                
+                { id: 'd4', category: 'plyn', date: '2026-09-15', type: 'Revízia / Kontrola', value: null, unit: '', note: 'Ročná revízia plynovej prípojky a detektora úniku', createdAt: 1004 },
+                { id: 'd5', category: 'plyn', date: '2026-10-01', type: 'Odpočet merača', value: 2450.0, unit: 'm³', note: 'Začiatok vykurovacej sezóny', createdAt: 1005 },
+                { id: 'd6', category: 'plyn', date: '2026-11-01', type: 'Odpočet merača', value: 2568.4, unit: 'm³', note: 'Mesačný odpočet plynomeru', createdAt: 1006 },
+
+                { id: 'd7', category: 'kurenie', date: '2026-09-20', type: 'Servis / Údržba', value: null, unit: '', note: 'Pravidelný servis kondenzačného kotla + čistenie filtra', createdAt: 1007 },
+                { id: 'd8', category: 'kurenie', date: '2026-10-01', type: 'Odpočet merača', value: 12400, unit: 'kWh', note: 'Stav merača tepla', createdAt: 1008 },
+                { id: 'd9', category: 'kurenie', date: '2026-11-01', type: 'Odpočet merača', value: 13650, unit: 'kWh', note: 'Odvzdušnenie radiátorov na poschodí', createdAt: 1009 }
+            ];
+
+            records = [...records, ...demo];
+            saveToStorage();
+            renderAll();
+            showToast('Ukážkové dáta boli pridané do aplikácie.', 'success');
+        }
+
+        // ==========================================
+        // 7. POMOCNÉ FUNKCIE (FORMÁTOVANIE A TOAST)
+        // ==========================================
+        function formatDateSK(isoDate) {
+            if (!isoDate) return '—';
+            const parts = isoDate.split('-');
+            if (parts.length !== 3) return isoDate;
+            return `${parts[2]}.${parts[1]}.${parts[0]}`;
+        }
+
+        function formatNumber(num) {
+            return Number(num).toLocaleString('sk-SK', { maximumFractionDigits: 3 });
+        }
+
+        function escapeHTML(str) {
+            if (!str) return '';
+            return str.replace(/[&<>'"]/g, tag => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                "'": '&#39;',
+                '"': '&quot;'
+            }[tag]));
+        }
+
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            
+            const styles = {
+                success: 'bg-slate-900 text-white border-slate-800',
+                error: 'bg-rose-600 text-white border-rose-700',
+                info: 'bg-slate-800 text-white border-slate-700'
+            };
+            const icons = {
+                success: 'fa-circle-check text-emerald-400',
+                error: 'fa-circle-exclamation text-white',
+                info: 'fa-circle-info text-blue-400'
+            };
+
+            toast.className = `pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg border text-sm font-medium transform transition-all duration-300 translate-y-2 opacity-0 ${styles[type]}`;
+            toast.innerHTML = `<i class="fa-solid ${icons[type]}"></i><span>${message}</span>`;
+
+            container.appendChild(toast);
+            requestAnimationFrame(() => {
+                toast.classList.remove('translate-y-2', 'opacity-0');
+            });
+
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
